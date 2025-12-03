@@ -1,8 +1,11 @@
 .DEFAULT_GOAL := help
+PYTHON_REPO_PATH := python
+BASH_REPO_PATH := bash
 VENV_FOLDER := .venv
-VENV_PATH := $(shell pwd)/$(VENV_FOLDER)
+VENV_PATH := $(shell pwd)/$(PYTHON_REPO_PATH)/$(VENV_FOLDER)
 VENV_BIN := $(VENV_PATH)/bin
 PACKAGER := uv
+
 
 help:
 	@grep -E '(^[a-zA-Z0-9_-]+:.*?##)|(^##)' $(firstword $(MAKEFILE_LIST)) | awk 'BEGIN {FS = ":.*?## "; printf "Usage: make \033[32m<target>\033[0m\n"}{printf "\033[32m%-20s\033[0m %s\n", $$1, $$2}' | sed -e 's/\[32m## /\n[33m/'
@@ -36,5 +39,4 @@ venv: create_venv ## Load virtual environment
 
 
 install: install_uv ## Install dependencies
-	$(PACKAGER) sync
-
+	cd $(PYTHON_REPO_PATH); $(PACKAGER) sync
