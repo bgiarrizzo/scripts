@@ -14,6 +14,8 @@
 
 set -e
 
+PATH_TO_STATS=/var/www/stats.giarrizzo.fr
+
 WEBSITE="$1"
 ALL_OR_LATEST="$2"
 
@@ -31,7 +33,7 @@ fi
 for website in "${website_list[@]}"; do
     echo "# ---------------------------------------------------"
     echo "Regenerating stats for ${website}..."
-    STATSDIR="/var/www/${website}/stats"
+    STATSDIR="${PATH_TO_STATS}/${website}"
 
     echo "Creating stats directory if it doesn't exist..."
     mkdir -p "${STATSDIR}"
@@ -57,23 +59,25 @@ for website in "${website_list[@]}"; do
             echo "Log file is current access log, using current date: ${stats_date}"
         fi
 
+        STATSDIR_WITH_DATE=${STATSDIR}/${stats_date}
+
         echo "Creating stats subdirectory for date if it doesn't exist..."
-        mkdir -p "${STATSDIR}/${stats_date}"
-        echo "Done creating directory: ${STATSDIR}/${stats_date}"
+        mkdir -p "${STATSDIR_WITH_DATE}"
+        echo "Done creating directory: ${STATSDIR_WITH_DATE}"
 
         echo "Processing log file: ${log_file}"
         
         zcat -f "${log_file}" | \
             grep -Ev "403|/stats/" | \
             goaccess - --unknowns-as-crawlers --ignore-crawlers --log-format=COMBINED \
-            --exclude-ip=192.168.1.0-192.168.1.255 -o /var/www/${website}/stats/${stats_date}/index.html
+            --exclude-ip=192.168.1.0-192.168.1.255 -o ${STATSDIR_WITH_DATE}/index.html
 
         zcat -f "${log_file}" | \
             grep -Ev "403|/stats/" | \
             goaccess - --log-format=COMBINED \
-            --exclude-ip=192.168.1.0-192.168.1.255 -o /var/www/${website}/stats/${stats_date}/with-crawlers.html
+            --exclude-ip=192.168.1.0-192.168.1.255 -o ${STATSDIR_WITH_DATE}/with-crawlers.html
             
-        echo "Stats generated at /var/www/${website}/stats/${stats_date}/"
+        echo "Stats generated at ${STATSDIR_WITH_DATE}/"
     done
 done
 
