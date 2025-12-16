@@ -15,25 +15,13 @@
 set -e
 
 declare -a WEBSITE_LIST=(
-        "hack-with-hyweene.com"
-        # Sites
-        "giarrizzo.fr" 
-        "bruno.giarrizzo.fr" 
-        "jessica.giarrizzo.fr" 
-        "lyanna.giarrizzo.fr"
-        "wedding.giarrizzo.fr" 
-        # Outils
-        "freshrss.giarrizzo.fr"
-        "home.giarrizzo.fr"
-        "retroarch.giarrizzo.fr"
-        "stats.giarrizzo.fr"
-        "wallabag.giarrizzo.fr"
-        # Servarr
-        "prowlarr.giarrizzo.fr"
-        "radarr.giarrizzo.fr"
-        "sonarr.giarrizzo.fr"
-        "lidarr.giarrizzo.fr"
-    )
+    "hack-with-hyweene.com"
+    "giarrizzo.fr" 
+    "bruno.giarrizzo.fr" 
+    "jessica.giarrizzo.fr" 
+    "lyanna.giarrizzo.fr"
+    "wedding.giarrizzo.fr"
+)
 
 LOG_IGNORE_PATTERN="403|/stats/|192.168.1.|127.0.0."
 
@@ -48,12 +36,19 @@ fi
 PATH_TO_LOGS=/var/log/nginx
 PATH_TO_STATS=/var/www/stats.giarrizzo.fr
 GLOBAL_INDEX=${PATH_TO_STATS}/index.html
+DATE_TODAY_YYYY_MM=$(date '+%Y-%m')
 
 if [ "${WEBSITE}" != "all" ]; then
     if [[ ! " ${WEBSITE_LIST[*]} " =~ " ${WEBSITE} " ]]; then
         echo "Error: Website '${WEBSITE}' is not in the predefined list."
         exit 1
     fi
+fi
+
+# Vérifie les permissions
+if [[ $EUID -ne 0 ]]; then
+    echo "Exécuter avec sudo ou en root"
+    exit 1
 fi
 
 {
@@ -78,9 +73,8 @@ fi
     echo "        <ul>"
 
     for WEBSITE_ITEM in "${WEBSITE_LIST[@]}"; do
-        WEBSITE_ITEM_PATH=${PATH_TO_STATS}/${WEBSITE}
-        if [ -f "${WEBSITE_ITEM_PATH}/index.html" ]; then
-            echo "            <li class='site-card'><a href='${WEBSITE_ITEM}/index.html'>${WEBSITE_ITEM}</a></li>"
+        if [ -d "${PATH_TO_STATS}/${WEBSITE_ITEM}" ]; then
+            echo "            <li class='site-card'><a href='${WEBSITE_ITEM}'>${WEBSITE_ITEM}</a></li>"
         fi
     done
 
@@ -90,6 +84,11 @@ fi
     echo "    </body>"
     echo "</html>"
 } > "${GLOBAL_INDEX}"
+
+echo ""
+echo "Main index updated at ${GLOBAL_INDEX}."
+
+chown bgiarrizzo:bgiarrizzo "${GLOBAL_INDEX}"
 
 echo ""
 echo "Init stats generation."
@@ -106,58 +105,88 @@ for WEBSITE_ITEM in "${WEBSITE_LIST[@]}"; do
     echo "# ---------------------------------------------------"
     echo ""
     echo "Generating all-time stats for ${WEBSITE_ITEM}..."
+
     STATSDIR="${PATH_TO_STATS}/${WEBSITE_ITEM}"
-    mkdir -p "${STATSDIR}"
+    mkdir -p ${PATH_TO_STATS}/${WEBSITE_ITEM}
 
-    PATH_TO_WEBSITE_ITEM_LOGS=${PATH_TO_LOGS}/${WEBSITE_ITEM}
+    echo "Processing log files :"
+    echo "  - ${PATH_TO_LOGS}/${WEBSITE_ITEM}/access.log"
+    echo "  - ${PATH_TO_STATS}/${WEBSITE_ITEM}/*/access.log.gz"
 
-    echo "Processing log file: ${PATH_TO_WEBSITE_ITEM_LOGS}/access.log*"
-
-    zcat -f ${PATH_TO_WEBSITE_ITEM_LOGS}/access.log* | \
+    zcat -f ${PATH_TO_LOGS}/${WEBSITE_ITEM}/access.log ${PATH_TO_STATS}/${WEBSITE_ITEM}/*/access.log.gz | \
         grep -Ev ${LOG_IGNORE_PATTERN} | \
         goaccess - --unknowns-as-crawlers --ignore-crawlers --log-format=COMBINED \
-        --exclude-ip=192.168.1.0-192.168.1.255 -o ${STATSDIR}/all-time-no-crawlers.html > /dev/null
+        --exclude-ip=192.168.1.0-192.168.1.255 -o ${PATH_TO_STATS}/${WEBSITE_ITEM}/all-time-no-crawlers.html > /dev/null
 
-    zcat -f ${PATH_TO_WEBSITE_ITEM_LOGS}/access.log* | \
+    zcat -f ${PATH_TO_LOGS}/${WEBSITE_ITEM}/access.log ${PATH_TO_STATS}/${WEBSITE_ITEM}/*/access.log.gz | \
         grep -Ev ${LOG_IGNORE_PATTERN} | \
         goaccess - --log-format=COMBINED \
-        --exclude-ip=192.168.1.0-192.168.1.255 -o ${STATSDIR}/all-time-with-crawlers.html > /dev/null
+        --exclude-ip=192.168.1.0-192.168.1.255 -o ${PATH_TO_STATS}/${WEBSITE_ITEM}/all-time-with-crawlers.html > /dev/null
 
-    for log_file in ${PATH_TO_WEBSITE_ITEM_LOGS}/access.log*; do
-
-        if [ "${ALL_OR_LATEST}" == "latest" ]; then
-            if [ "$(basename "$log_file")" != "access.log" ] && [ "$(basename "$log_file")" != "access.log.gz" ]; then
-                continue
-            fi
-        fi
-
+    if [ "${ALL_OR_LATEST}" == "latest" ]; then
         echo ""
         echo "# ---------------------------------------------------"
         echo ""
-        stats_date=$(basename "$log_file" | sed -E 's/access\.log\.([0-9]{4})-([0-9]{2})/\1-\2/' | tr -d '.gz')
-        if [ "${stats_date}" == "accesslo" ]; then
-            stats_date=$(date +%Y-%m)
-        fi
+        echo "Generating ${WEBSITE} latest stats ..."
+        echo ""
+        echo "Processing log file:"
+        echo "  - ${PATH_TO_LOGS}/${WEBSITE_ITEM}/access.log"
+        echo ""
 
-        echo "Generating ${stats_date} stats ..."
+        mkdir -p ${PATH_TO_STATS}/${WEBSITE_ITEM}/${DATE_TODAY_YYYY_MM}
 
-        STATSDIR_WITH_DATE=${STATSDIR}/${stats_date}
-        mkdir -p "${STATSDIR_WITH_DATE}"
-
-        echo "Processing log file: ${log_file}"
-
-        zcat -f "${log_file}" | \
+        zcat -f "${PATH_TO_LOGS}/${WEBSITE_ITEM}/access.log" | \
             grep -Ev ${LOG_IGNORE_PATTERN} | \
             goaccess - --unknowns-as-crawlers --ignore-crawlers --log-format=COMBINED \
-            --exclude-ip=192.168.1.0-192.168.1.255 -o ${STATSDIR_WITH_DATE}/index.html > /dev/null
+            --exclude-ip=192.168.1.0-192.168.1.255 -o ${PATH_TO_STATS}/${WEBSITE_ITEM}/${DATE_TODAY_YYYY_MM}/index.html > /dev/null
 
-        zcat -f "${log_file}" | \
+        zcat -f "${PATH_TO_LOGS}/${WEBSITE_ITEM}/access.log" | \
             grep -Ev ${LOG_IGNORE_PATTERN} | \
             goaccess - --log-format=COMBINED \
-            --exclude-ip=192.168.1.0-192.168.1.255 -o ${STATSDIR_WITH_DATE}/with-crawlers.html /dev/null
-    done
+            --exclude-ip=192.168.1.0-192.168.1.255 -o ${PATH_TO_STATS}/${WEBSITE_ITEM}/${DATE_TODAY_YYYY_MM}/with-crawlers.html /dev/null
 
-    INDEX_HTML="${STATSDIR}/index.html"
+        echo ""
+        echo "Files generated at ${PATH_TO_STATS}/${WEBSITE_ITEM}/${DATE_TODAY_YYYY_MM}/"
+    else
+        for FOLDER in ${PATH_TO_STATS}/${WEBSITE_ITEM}/*; do
+
+            if [ -d ${FOLDER} ]; then
+                DATE_YYYY_MM=$(basename ${FOLDER})
+                
+                if [ ${DATE_YYYY_MM} == ${DATE_TODAY_YYYY_MM} ]; then
+                    continue
+                fi
+            else
+                continue
+            fi
+
+            echo ""
+            echo "# ---------------------------------------------------"
+            echo ""
+
+            echo "Generating ${WEBSITE} ${DATE_YYYY_MM} stats ..."
+
+            mkdir -p ${PATH_TO_STATS}/${WEBSITE_ITEM}/${DATE_YYYY_MM}
+
+            echo "Processing log file :"
+            echo "  - ${PATH_TO_STATS}/${WEBSITE_ITEM}/${DATE_YYYY_MM}/access.log.gz"
+            echo ""
+
+            zcat -f "${PATH_TO_STATS}/${WEBSITE_ITEM}/${DATE_YYYY_MM}/access.log.gz" | \
+                grep -Ev ${LOG_IGNORE_PATTERN} | \
+                goaccess - --unknowns-as-crawlers --ignore-crawlers --log-format=COMBINED \
+                --exclude-ip=192.168.1.0-192.168.1.255 -o ${PATH_TO_STATS}/${WEBSITE_ITEM}/${DATE_YYYY_MM}/index.html > /dev/null
+
+            zcat -f "${PATH_TO_STATS}/${WEBSITE_ITEM}/${DATE_YYYY_MM}/access.log.gz" | \
+                grep -Ev ${LOG_IGNORE_PATTERN} | \
+                goaccess - --log-format=COMBINED \
+                --exclude-ip=192.168.1.0-192.168.1.255 -o ${PATH_TO_STATS}/${WEBSITE_ITEM}/${DATE_YYYY_MM}/with-crawlers.html /dev/null
+
+            chown -R bgiarrizzo:bgiarrizzo "${PATH_TO_STATS}/${WEBSITE_ITEM}/${DATE_YYYY_MM}"
+        done
+    fi
+
+    INDEX_HTML="${PATH_TO_STATS}/${WEBSITE_ITEM}/index.html"
 
     {
         echo "<!DOCTYPE html>"
@@ -172,7 +201,7 @@ for WEBSITE_ITEM in "${WEBSITE_LIST[@]}"; do
         echo "            a { text-decoration: none; color: #268bd2; }"
         echo "            a:hover { text-decoration: underline; }"
         echo "            .site-card { background: #fff; border: 1px solid #ddd; padding: 15px; border-radius: 8px; box-shadow: 1px 1px 2px rgba(0,0,0,0.05); margin-bottom: 10px; }"
-        echo "        <style>"
+        echo "        </style>"
         echo "    </head>"
         echo "    <body>"
         echo "        <h1>Statistiques pour ${WEBSITE_ITEM}</h1>"
@@ -180,10 +209,10 @@ for WEBSITE_ITEM in "${WEBSITE_LIST[@]}"; do
         echo "        <ul>"
         echo "        <li class='site-card'>All time — <a href='all-time-no-crawlers.html'>sans crawlers</a> / <a href='all-time-with-crawlers.html'>avec crawlers</a></li>"
 
-        for subdir in $(ls -d ${STATSDIR}/*/ 2>/dev/null | sort -r); do
+        for subdir in $(ls -d ${PATH_TO_STATS}/${WEBSITE_ITEM}/*/ 2>/dev/null | sort -r); do
             dirname=$(basename "${subdir}")
-            if [ -f "${subdir}/index.html" ]; then
-                echo "        <li class='site-card'>${dirname} — <a href='${dirname}/index.html'>sans crawlers</a> / <a href='${dirname}/with-crawlers.html'>avec crawlers</a></li>"
+            if [ -d "${subdir}" ]; then
+                echo "        <li class='site-card'>${dirname} — <a href='${dirname}'>sans crawlers</a> / <a href='${dirname}/with-crawlers.html'>avec crawlers</a></li>"
             fi
         done
 
@@ -193,6 +222,11 @@ for WEBSITE_ITEM in "${WEBSITE_LIST[@]}"; do
         echo "    </body>"
         echo "</html>"
     } > "${INDEX_HTML}"
+
+    echo ""
+    echo "Stats for ${WEBSITE_ITEM} generated at ${INDEX_HTML}."
+
+    chown -R bgiarrizzo:bgiarrizzo "${PATH_TO_STATS}/${WEBSITE_ITEM}"
 done
 
 echo ""
