@@ -1,10 +1,21 @@
 #!/bin/bash
 
 # Script to pull the latest changes from the website Git repository
+#
+# Fetch remote modifications in git repo
+# If changes are detected, then run make build, if changes are not detected, then skip
+#
 
 set -e
 
-declare -a website_list=("giarrizzo.fr" "bruno.giarrizzo.fr" "jessica.giarrizzo.fr" "lyanna.giarrizzo.fr" "wedding.giarrizzo.fr" "hack-with-hyweene.com")
+declare -a website_list=(
+    "bruno.giarrizzo.fr"
+    "giarrizzo.fr"
+    "hack-with-hyweene.com"
+    "jessica.giarrizzo.fr"
+    "lyanna.giarrizzo.fr"
+    "wedding.giarrizzo.fr"
+)
 
 WEBSITE="$1"
 
@@ -23,7 +34,7 @@ cd "/home/bgiarrizzo/code/Websites/${WEBSITE}" || exit 1
 git fetch
 
 LOCAL=$(git rev-parse HEAD)
-REMOTE=$(git rev-parse @{u})
+REMOTE=$(git rev-parse "$(git rev-parse --abbrev-ref --symbolic-full-name @{u})")
 
 if [ "$LOCAL" != "$REMOTE" ]; then
     echo "Updates found. Pulling latest changes..."

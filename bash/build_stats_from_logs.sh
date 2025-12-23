@@ -1,4 +1,5 @@
 #!/bin/bash
+
 # Script to generate web statistics from Nginx access logs using GoAccess
 # 
 # If "website" argument is "all", it processes all predefined websites.
@@ -14,16 +15,20 @@
 
 set -e
 
+PATH_TO_LOGS=/var/log/nginx
+PATH_TO_STATS=/var/www/stats.giarrizzo.fr
+GLOBAL_INDEX=${PATH_TO_STATS}/index.html
+DATE_TODAY_YYYY_MM=$(date '+%Y-%m')
+LOG_IGNORE_PATTERN="403|/stats/|192.168.1.|127.0.0."
+
 declare -a WEBSITE_LIST=(
+    "bruno.giarrizzo.fr"
+    "giarrizzo.fr"
     "hack-with-hyweene.com"
-    "giarrizzo.fr" 
-    "bruno.giarrizzo.fr" 
-    "jessica.giarrizzo.fr" 
+    "jessica.giarrizzo.fr"
     "lyanna.giarrizzo.fr"
     "wedding.giarrizzo.fr"
 )
-
-LOG_IGNORE_PATTERN="403|/stats/|192.168.1.|127.0.0."
 
 WEBSITE="$1"
 ALL_OR_LATEST="$2"
@@ -32,11 +37,6 @@ if [ -z "${WEBSITE}" ] || [ -z "${ALL_OR_LATEST}" ]; then
     echo "Usage: $0 <all/website_name> <all/latest>"
     exit 1
 fi
-
-PATH_TO_LOGS=/var/log/nginx
-PATH_TO_STATS=/var/www/stats.giarrizzo.fr
-GLOBAL_INDEX=${PATH_TO_STATS}/index.html
-DATE_TODAY_YYYY_MM=$(date '+%Y-%m')
 
 if [ "${WEBSITE}" != "all" ]; then
     if [[ ! " ${WEBSITE_LIST[*]} " =~ " ${WEBSITE} " ]]; then
